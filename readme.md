@@ -44,7 +44,7 @@ The modulation is GFSK and the data rate is 125 Kbps.
 ### RF packet format
 ![RF packet format](img/rf_packet_format.png)
 
-Ref to the BC5602 datasheet, the packet starts with preambule **10101010** and has 3-byte address, **9 bits PCF** and a dynamic payload length, but always 10 bytes.
+Ref to the BC5602 datasheet, the packet starts with preambule **10101010** and has 4-byte address, **9 bits PCF** and a dynamic payload length, but always 10 bytes.
 
 ### Payload
 ![Payload example](img/payload_example.png)
@@ -79,7 +79,7 @@ The payload ends with **01 02** in my case. It doesn't appear that color tempera
 The brightness ranges from 1% to 100%, corresponding to values from 0x01 to 0x64.
 
 #### Color temperature
-The color temperature ranges from 2700K to 6500K, corresponding from **0x0A8C** to **0x1964**.
+The color temperature ranges from 2700K to 6500K, corresponding to values from **0x0A8C** to **0x1964**.
 For example, 4000K is transferred as **byte 1 = 0x0F**, **byte 2 = 0xA0**.
 
 ### Pairing process
