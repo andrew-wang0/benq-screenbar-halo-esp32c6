@@ -4,11 +4,11 @@ This a PoC for integrating BenQ ScreenBar HALO 2 with Home Assistant.
 The project is written on MicroPython and uses [MicroPython Asynchronous MQTT](https://github.com/peterhinch/micropython-mqtt) library by Peter Hinch, 
 as well as ideas from [hatank](https://github.com/rguillon/hatank) by Renaud Guillon.
 
-### The required hardware:
+## The required hardware:
 - Transceiver [BM5602-60-1](https://www.holtek.com/page/vg/BM5602-60-1)
 - Raspberry Pi Pico W
 
-### Connection diagram
+## Connection diagram
 
 ![](img/connection_diagramm.png)
 
@@ -25,15 +25,29 @@ WiFi and MQTT credentials can be configured in [halo_mqtt.py](src/benq_halo/halo
 The address for communication HALO2_ADDRESS can be configured in [benq_halo](src/benq_halo/__init__.py).
 NB! it has reverse byte order compared to the captured data in RF packet, ref to [BC5602 datasheet](https://www.holtek.com/webapi/116711/BC5602v120.pdf), **Bit ordering** section.
 
-The address during the pairing process is **E2 08 00 B0**, but the communication address is most probably transferred during pairing process in an encoded/encrypted form.
-To find the communication address, I used [HackRF One](https://en.wikipedia.org/wiki/HackRF_One) and [Universal Radio Hacker (URH)](https://github.com/jopohl/urh)
-
 In FCCID report for the Halo 2 mentioned three radio channels, but I observed communication only on channel 1.
 The modulation is GFSK and the data rate is 125 Kbps.
 
 * Channel 1 -> 2405 MHz (default)
 * Channel 2 -> 2446
 * Channel 3 -> 2475
+
+The address during the pairing process is **E2 08 00 B0**, but the communication address is most likely transferred during pairing process in an encoded or encrypted form.
+
+To find the communication address, you can use:
+* The python script **find_halo2_address.py**, which should be run on the MCU (Raspberry Pi Pico W)
+* [HackRF One](https://en.wikipedia.org/wiki/HackRF_One) and [Universal Radio Hacker (URH)](https://github.com/jopohl/urh)
+
+## Find communication address using Python script
+
+The script **find_halo2_address.py** will attempt to find HALO2_ADDRESS (the address or sync word which used to communicate with the Halo 2 lamp).
+You need to start this script on the MCU and set the following parameters on the Halo 2 remote control:
+* Set the brightness of back lamp to 10%
+* Set the color temperature to 3925K
+
+The HALO2_ADDRESS will be printed on the screen several times while the remote control is communication with the lamp.
+
+## Find communication address using HackRF One
 
 ### Starting to capture the RF signal in URH
 ![Starting capturing the RF signal in URH](img/urh_screenshot1.png)
@@ -102,7 +116,3 @@ To track the current state, the integration device must poll the lamp every 5 se
 This is more complicated, because the integration device must disable Auto-ACK; otherwise, the remote control will not reach the lamp.
 Disabling Auto-ACK also disabling dynamic payload length feature and CRC, so the integration device must process the Packet Control Field and adjust the payload to one bit, since the PCF is 9 bits long.
 
-## Unsolved part
-The only unsolved question is how to convert data from the pairing payload into the communication address, or how to simplify obtaining the communication address.
-BC5602 does not allow receiving all RF-traffic at a given frequency; it requires a valid address field in the packet.
-**Direct mode**, which is not described in datasheet, doesn't allow this as well.
