@@ -178,6 +178,7 @@ class HaMqttSwitch(HaMqttEntity):
 
         self.input_topics["{}/set".format(self.base_topic)] = self.set
         self.output_topics["{}/state".format(self.base_topic)] = self.state
+        self.is_updated = True
 
     def set(self, payload):
         try:
@@ -219,6 +220,7 @@ class HaMqttBasicLight(HaMqttEntity):
         self.input_topics["{}/set".format(self.base_topic)] = self.set
         self.output_topics["{}/state".format(self.base_topic)] = self.state
         self.output_topics["{}/availability".format(self.base_topic)] = self.availability
+        self.is_updated = True
 
     def set(self, payload):
         try:
@@ -314,6 +316,7 @@ class HaMqttButton(HaMqttEntity):
             self.discover_conf["icon"] = icon
 
         self.input_topics["{}/set".format(self.base_topic)] = self.set
+        self.is_updated = True
 
     def set(self, payload):
         try:

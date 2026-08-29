@@ -1,5 +1,6 @@
 import time
 import bc5602
+from halo2_address import HALO2_ADDRESS
 
 RF_CHANNEL_1 = 5  # 2405 - 2400 MHz (default)
 RF_CHANNEL_2 = 46 # 2446 - 2400 MHz
@@ -7,7 +8,6 @@ RF_CHANNEL_3 = 75 # 2475 - 2400 MHz
 
 DATA_RATE_125k = 0b00000010 # 125Kbps
 
-HALO2_ADDRESS = [0x00, 0x00, 0x00, 0x00]
 HALO2_PKT_END = [0x01, 0x02]
 
 class benq_halo():
@@ -17,7 +17,7 @@ class benq_halo():
         self._bc5602_tx_mode = False
         self._debug = False
 
-        self.pir_sensor_status = True
+        self.ultrasonic_sensor_status = True
         self.front_lamp_status = True
         self.onoff_status = True
         self.back_lamp_status = False
@@ -36,7 +36,7 @@ class benq_halo():
 
     def __str__(self):
         return  f"On/Off status: {self.onoff_status}\n" \
-                f"PIR status: {self.pir_sensor_status}\n" \
+                f"Ultrasonic status: {self.ultrasonic_sensor_status}\n" \
                 f"Front lamp status: {self.front_lamp_status}\n" \
                 f"Back lamp status: {self.back_lamp_status}\n" \
                 f"Front lamp brightness: {self.front_lamp_brightness}\n" \
@@ -202,7 +202,7 @@ class benq_halo():
         Parse packet and update internal lamp state
         """
         self.onoff_status = ack_data[1] & 0b00000001
-        self.pir_sensor_status = (ack_data[1] & 0b00100000) >> 5
+        self.ultrasonic_sensor_status = (ack_data[1] & 0b00100000) >> 5
         #auto_status = (ack_data[1] & 0b00000010) >> 1
         #favorite_status = (ack_data[1] & 0b00000100) >> 2
         lamp_status = (ack_data[1] & 0b00011000) >> 3
@@ -216,7 +216,7 @@ class benq_halo():
         lamp_status = 0
         if self.back_lamp_status:
             lamp_status = self.back_lamp_status + self.front_lamp_status
-        control = (self.pir_sensor_status << 5) | (lamp_status << 3) | (self.onoff_status)
+        control = (self.ultrasonic_sensor_status << 5) | (lamp_status << 3) | (self.onoff_status)
         color_temp_byte1 = self.front_lamp_color_temp >> 8
         color_temp_byte2 = self.front_lamp_color_temp & 0x00FF
         return (control, color_temp_byte1, color_temp_byte2)
@@ -254,7 +254,7 @@ class benq_halo():
         Fill in dictinary with lamp status
         """
         lamp_status = {
-            'pir_sensor_status': self.pir_sensor_status,
+            'ultrasonic_sensor_status': self.ultrasonic_sensor_status,
             'onoff_status': self.onoff_status,
             'front_lamp_status': self.front_lamp_status,
             'back_lamp_status': self.back_lamp_status,
@@ -314,26 +314,26 @@ class OnOff:
         if self._benq_halo._debug:
             print("onoff_status False")
 
-class PirSensor:
+class UltrasonicSensor:
     """
-    PIR sensor switch
+    Ultrasonic sensor switch
     """
     def __init__(self, benq_halo):
         self._benq_halo = benq_halo
         if self._benq_halo._debug:
-            print("PirSensor init")
+            print("UltrasonicSensor init")
 
     def on(self):
-        self._benq_halo.pir_sensor_status = True
+        self._benq_halo.ultrasonic_sensor_status = True
         self._benq_halo.update_lamp_status()
         if self._benq_halo._debug:
-            print("pir_sensor_status True")
+            print("ultrasonic_sensor_status True")
 
     def off(self):
-        self._benq_halo.pir_sensor_status = False
+        self._benq_halo.ultrasonic_sensor_status = False
         self._benq_halo.update_lamp_status()
         if self._benq_halo._debug:
-            print("pir_sensor_status False")
+            print("ultrasonic_sensor_status False")
 
 class BackLamp:
     """

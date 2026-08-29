@@ -1,4 +1,14 @@
 import time
+
+while True:
+    try:
+        from halo2_address import HALO2_ADDRESS
+        if (isinstance(HALO2_ADDRESS, list)) and (len(HALO2_ADDRESS) == 4) and all(isinstance(x, int) for x in HALO2_ADDRESS):
+             break
+    except ImportError:
+        print("No HALO2_ADDRESS: set brightness 10% and color temperature to 3925K on remote control.")
+        exec(open("/find_halo2_address.py").read())
+
 import bc5602
 
 RF_CHANNEL_1 = 5  # 2405 - 2400 MHz (default)
@@ -6,9 +16,6 @@ RF_CHANNEL_2 = 46 # 2446 - 2400 MHz
 RF_CHANNEL_3 = 75 # 2475 - 2400 MHz
 
 DATA_RATE_125k = 0b00000010 # 125Kbps
-
-HALO2_ADDRESS = [0x00, 0x00, 0x00, 0x00]
-PAIRING_ADDRESS = [0xb0, 0x00, 0x08, 0xe2]
 
 _bc5602 = bc5602.bc5602()
 

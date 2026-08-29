@@ -74,12 +74,30 @@ _bc5602.set_register(bc5602.BANK0_ENAA_REGISTER | bc5602.CMD_WRITE_REGISTER, 0x0
 _bc5602.send_command(bc5602.CMD_FLUSH_RX_FIFO)
 _bc5602.send_command(bc5602.CMD_RX_MODE)
 
+addresses = []
+addresses_count = 0
 while True:
     status = _bc5602.read_register(bc5602.STATUS_REGISTER | bc5602.CMD_READ_REGISTER)[0] & 0b00000001
     if status == 0x00:
         rxd_len = _bc5602.read_register(bc5602.PKT4_REGISTER | bc5602.CMD_READ_REGISTER)[0]
         data = shift_right_one_bit(_bc5602.receive_data(rxd_len, shift_one_bit=False))[7:12]
         if data[0] == 0xAA:
-            print("HALO2_ADDRESS = [0x{:02x}, 0x{:02x}, 0x{:02x}, 0x{:02x}]".format(data[4], data[3], data[2], data[1]))
+            addresses.append("HALO2_ADDRESS = [0x{:02x}, 0x{:02x}, 0x{:02x}, 0x{:02x}]".format(data[4], data[3], data[2], data[1]))
+            addresses_count += 1
+            if addresses_count == 5:
+                break
     else:
          time.sleep_ms(1)
+
+counts = {}
+
+for item in addresses:
+    if item in counts:
+        counts[item] += 1
+    else:
+        counts[item] = 1
+
+most_frequent = max(counts, key=counts.get)
+
+with open("/halo2_address.py", "w") as f:
+    f.write(most_frequent)

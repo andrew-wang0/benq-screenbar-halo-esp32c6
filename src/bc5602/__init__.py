@@ -110,6 +110,9 @@ class bc5602:
         mask_register = self.read_register(MASK_REGISTER | CMD_READ_REGISTER)[0]
         self.set_register(MASK_REGISTER | CMD_WRITE_REGISTER, mask_register | 0x01)
 
+        # Disable retransmissions
+        self.set_register(RT1_REGISTER | CMD_WRITE_REGISTER, 0x00)
+
         # Check if the transceiver has just been powered on
         rc1_register = self.read_register(RC1_REGISTER | CMD_READ_REGISTER)[0]
         if (rc1_register & 0b10000000) > 0:
@@ -128,7 +131,7 @@ class bc5602:
 
     def shift_left_one_bit(self, data: bytes):
         '''
-        Correct data for 1 bit because of 9 bits Packet Control Field
+        Correct data for 1 bit becase of 9 bits Packet Control Fiels
         Required only in no-ack mode
         '''
         result = bytearray(len(data))
@@ -286,6 +289,3 @@ class bc5602:
         print("--- END OF CONTROL REGS: Bank {bank} ---\n")
         
         self.set_bank(current_bank)
-
-
-

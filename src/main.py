@@ -1,4 +1,14 @@
 import time
+
+while True:
+    try:
+        from halo2_address import HALO2_ADDRESS
+        if (isinstance(HALO2_ADDRESS, list)) and (len(HALO2_ADDRESS) == 4) and all(isinstance(x, int) for x in HALO2_ADDRESS):
+             break
+    except ImportError:
+        print("No HALO2_ADDRESS: set brightness 10% and color temperature to 3925K on remote control.")
+        exec(open("/find_halo2_address.py").read())
+
 import benq_halo
 import benq_halo.halo_mqtt as halo_mqtt
 
@@ -29,19 +39,19 @@ back_light = halo_mqtt.HaMqttBrightnessLight(name="back_light", full_name="Back 
                                              dim_status=lamp_status['back_lamp_brightness'],
                                              availability=lamp_status['onoff_status'])
 
-pir_sensor = halo_mqtt.HaMqttSwitch(name="pir_sensor", full_name="PIR Sensor", switch=benq_halo.PirSensor(benq_halo2), 
-                                             pow_status=lamp_status['pir_sensor_status'], icon="mdi:motion-sensor")
+ultrasonic_sensor = halo_mqtt.HaMqttSwitch(name="ultrasonic_sensor", full_name="Ultrasonic Sensor", switch=benq_halo.UltrasonicSensor(benq_halo2), 
+                                             pow_status=lamp_status['ultrasonic_sensor_status'], icon="mdi:motion-sensor")
 
 halo_mqtt.HaMqttButton(name="auto_config", full_name="Auto", button=benq_halo.AutoConfig(benq_halo2), icon="mdi:auto-mode")
 
 def update_mqtt_entities():
-    pir_sensor.update(benq_halo2.pir_sensor_status)
+    ultrasonic_sensor.update(benq_halo2.ultrasonic_sensor_status)
     onoff_status.update(benq_halo2.onoff_status)
     back_light.update(benq_halo2.back_lamp_status, benq_halo2.back_lamp_brightness, benq_halo2.onoff_status)
     front_light.update(benq_halo2.front_lamp_status, benq_halo2.front_lamp_brightness, benq_halo2.front_lamp_color_temp, benq_halo2.onoff_status)
 
 try:
-    interval = 5  # Check lamp status evry 5 seconds
+    interval = 5  # Check lamp status every 5 seconds
     last_run = time.time()
     while True:
         asyncio.run(main())
