@@ -1,5 +1,6 @@
 from machine import Pin, SPI
 import time
+import sys
 
 CFG1_REGISTER = 0x00
 RC1_REGISTER = 0x01
@@ -83,13 +84,28 @@ CMD_TX_MODE = 0b00001110
 CMD_RX_MODE = 0b10001110
 
 class bc5602:
-    def __init__(self, spi_num=0, cs_pin=Pin(1, Pin.OUT), sck_pin=Pin(2, Pin.OUT), mosi_pin=Pin(3, Pin.OUT), miso_pin=Pin(4, Pin.IN), baudrate=100000):
-        self._spi_num = spi_num
-        self._cs = cs_pin
-        self._sck = sck_pin
-        self._mosi = mosi_pin
-        self._miso = miso_pin
-        self._spi = SPI(spi_num, baudrate=baudrate, polarity=0, phase=0, sck=sck_pin, mosi=mosi_pin, miso=miso_pin)
+    def __init__(self, spi_num=None, cs_pin=None, sck_pin=None, mosi_pin=None, miso_pin=None, baudrate=10000000):
+
+        platform = sys.platform
+
+        if platform == "esp32":
+            self._spi_num = 1 if spi_num is None else spi_num
+            self._cs  = Pin(5, Pin.OUT) if cs_pin is None else cs_pin
+            self._sck = Pin(18, Pin.OUT) if sck_pin is None else sck_pin
+            self._mosi = Pin(23, Pin.OUT) if mosi_pin is None else mosi_pin
+            self._miso = Pin(19, Pin.IN) if miso_pin is None else miso_pin
+
+        elif platform == "rp2":
+            self._spi_num = 0 if spi_num is None else spi_num
+            self._cs = Pin(1, Pin.OUT) if cs_pin is None else cs_pin
+            self._sck = Pin(2, Pin.OUT) if sck_pin is None else sck_pin
+            self._mosi = Pin(3, Pin.OUT) if mosi_pin is None else mosi_pin
+            self._miso = Pin(4, Pin.IN) if miso_pin is None else miso_pin
+
+        else:
+            raise RuntimeError(f"Unsupported platform: {platform}")
+
+        self._spi = SPI(self._spi_num, baudrate=baudrate, polarity=0, phase=0, sck=self._sck, mosi=self._mosi, miso=self._miso)
 
         # Configure GIO2 as SPI data output: 4-wire mode
         self.set_register(IO1_REGISTER | CMD_WRITE_REGISTER, 0b01001000)
@@ -99,7 +115,7 @@ class bc5602:
 
         # Check if BM5602 is connected
         chip_version = self.read_register(CMD_READ_CHIP_VERSION | CMD_READ_REGISTER, bytes=3).hex().upper()
-        if (chip_version == "000000") or (chip_version == "FFFFFFFF"):
+        if (chip_version == "000000") or (chip_version == "FFFFFF"):
             raise RuntimeError("Transceiver BM5602 not found!")
         else:
             print(f"Chip version: {chip_version}")
@@ -142,39 +158,39 @@ class bc5602:
         return bytes(result)
 
     def send_data(self, command_and_data):
-        self._cs.low()
+        self._cs.value(0)
         self._spi.write(bytearray(command_and_data))
-        self._cs.high()
+        self._cs.value(1)
 
     def receive_data(self, len, shift_one_bit=False):
-        self._cs.low()
+        self._cs.value(0)
         self._spi.write(bytearray([CMD_READ_RX_FIFO]))
         data = self._spi.read(len)
-        self._cs.high()
+        self._cs.value(1)
         if shift_one_bit:
             data = self.shift_left_one_bit(data)
         return data
 
     def send_command(self, command, read_bytes=0):
-        self._cs.low()
+        self._cs.value(0)
         try:
             self._spi.write(bytearray([command]))
             if read_bytes > 0:
                 data = self._spi.read(read_bytes)
                 return data
         finally:
-            self._cs.high()
+            self._cs.value(1)
 
     def set_register(self, register, value):
-        self._cs.low()
+        self._cs.value(0)
         self._spi.write(bytearray([register, value]))
-        self._cs.high()
+        self._cs.value(1)
 
     def read_register(self, register, bytes=1):
-        self._cs.low()
+        self._cs.value(0)
         self._spi.write(bytearray([register]))
         data = self._spi.read(bytes)
-        self._cs.high()
+        self._cs.value(1)
         return data
 
     def get_bank(self):

@@ -1,4 +1,5 @@
 import time
+import machine
 
 while True:
     try:
@@ -8,6 +9,7 @@ while True:
     except ImportError:
         print("No HALO2_ADDRESS: set brightness 10% and color temperature to 3925K on remote control.")
         exec(open("/find_halo2_address.py").read())
+        machine.reset() # ESP32 out of memory fix
 
 import benq_halo
 import benq_halo.halo_mqtt as halo_mqtt
@@ -27,7 +29,7 @@ lamp_status = benq_halo2.request_lamp_status(command=0x00)
 onoff_status = halo_mqtt.HaMqttSwitch(name="onoff_status", full_name="On/Off", switch=benq_halo.OnOff(benq_halo2), 
                                              pow_status=lamp_status['onoff_status'], icon="mdi:power")
 
-front_light = halo_mqtt.HaMqttBrightnessLightWithColorTemp(name="front_light", full_name="Front Light",           
+front_light = halo_mqtt.HaMqttBrightnessLightWithColorTemp(name="front_light", full_name="Front Light",
                                              light=benq_halo.FrontLamp(benq_halo2), 
                                              pow_status=lamp_status['front_lamp_status'], 
                                              dim_status=lamp_status['front_lamp_brightness'], 

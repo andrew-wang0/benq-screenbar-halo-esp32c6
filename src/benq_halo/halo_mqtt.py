@@ -1,3 +1,4 @@
+import sys
 import json
 from machine import Pin
 from mqtt_as import MQTTClient, config
@@ -9,13 +10,18 @@ except ImportError:
 
 mqtt_entities = []
 
-wifi_led = Pin('LED', Pin.OUT)
+platform = sys.platform.lower()
+
+if "esp32" in platform:
+    wifi_led = Pin(2, Pin.OUT)
+elif "rp2" in platform:
+    wifi_led = Pin('LED', Pin.OUT)
 
 # Fill in the configuration below!!!
 # ==================================
 #
 # WiFi SSID and password
-# 
+#
 config['ssid'] = 'WiFi-network-name'
 config['wifi_pw'] = 'WiFi-password'
 #

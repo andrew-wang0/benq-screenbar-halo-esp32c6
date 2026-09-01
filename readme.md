@@ -1,34 +1,34 @@
 # BenQ ScreenBar HALO 2 - integration with Home Assistant
 
-This is a fully functioanl PoC for integrating BenQ ScreenBar HALO 2 with Home Assistant.
+This is a fully functional PoC for integrating BenQ ScreenBar HALO 2 with Home Assistant.
 The project is written on MicroPython and uses [MicroPython Asynchronous MQTT](https://github.com/peterhinch/micropython-mqtt) library by Peter Hinch, 
 as well as ideas from [hatank](https://github.com/rguillon/hatank) by Renaud Guillon.
 
 ## The required hardware:
-- Transceiver [BM5602-60-1](https://www.holtek.com/page/vg/BM5602-60-1)
-- Raspberry Pi Pico W
+- Transceiver: [BM5602-60-1](https://www.holtek.com/page/vg/BM5602-60-1)
+- MCU: tested with Raspberry Pi Pico W and ESP32-WROOM DevKit
 
 ## Connection diagram
 
 ![](img/connection_diagramm.png)
 
-| BM5602-60-1 | Raspberry Pi Pico W |
-|-------------|---------------------|
-| CSN         | GP1 (SPI0 CSn)      |
-| SCK         | GP2 (SPI0 SCK)      |
-| SDIO        | GP3 (SPI0 TX)       |
-| GIO2        | GP4 (SPI0 RX)       |
-| VSS         | GND                 |
-| VDD         | +3.3V (OUT)         |
+| BM5602-60-1 | Raspberry Pi Pico W | ESP32-WROOM DevKit |
+|-------------|---------------------|--------------------|
+| CSN         | GP1 (SPI0 CSn)      | GPIO 5             |
+| SCK         | GP2 (SPI0 SCK)      | GPIO 18            |
+| SDIO        | GP3 (SPI0 TX)       | GPIO 23            |
+| GIO2        | GP4 (SPI0 RX)       | GPIO 19            |
+| VSS         | GND                 | GND                |
+| VDD         | +3.3V (OUT pin 36)  | +3.3V              |
 
 ## Quick start
 
-* Connect the BM5602-60-1 transceiver to the Raspberry Pi Pico W according to the connection diagram. Remember to connect GND and +3.3V (to pin 36).
-* Install [MicroPython](https://www.raspberrypi.com/documentation/microcontrollers/micropython.html) to your Raspberry Pi Pico W
-* Clone the repository and edit the WiFi and MQTT credentials in [halo_mqtt.py](src/benq_halo/halo_mqtt.py)
-* Copy the contents of `src` folder to the root folder of the Raspberry Pi Pico using [Thonny IDE](https://thonny.org/) or [Visual Studio Code](https://code.visualstudio.com/) with [Raspberry Pi Pico extension](https://marketplace.visualstudio.com/items?itemName=raspberry-pi.raspberry-pi-pico).
-* Start the Raspberry Pi Pico W without a connection to a computer, or run `main.py` manually.
-* Use the Halo 2 remote controller to set the back lamp brightness to 10% and the color temperature to 3925 K. This is required to acquire the lamp's communication address. The address will be saved to the `halo2_address.py` file. If you want to use the integration device with another lamp that has a different communication address, simply delete this file and repeat the procedure.
+* Connect the BM5602-60-1 transceiver to the MCU according to the connection diagram. Remember to connect GND and +3.3V
+* Install MicroPython to your MCU: [Raspberry Pi Pico W](https://www.raspberrypi.com/documentation/microcontrollers/micropython.html) or [ESP32-WROOM Devkit](https://micropython.org/download/ESP32_GENERIC/).
+* Clone the repository and edit the WiFi and MQTT credentials in [halo_mqtt.py](src/benq_halo/halo_mqtt.py) file.
+* Copy the contents of `src` folder to the root folder of the MCU using PyCharm with [MicroPython](https://plugins.jetbrains.com/plugin/9777-micropython) plugin or other IDE/tool.
+* Restart MCU.
+* Use the Halo 2 remote controller to set the back lamp brightness to 10% and the color temperature to 3925 K. This is required to acquire the lamp's communication address. The address will be saved to the `halo2_address.py` file. If you want to use the integration device with another lamp that has a different communication address, simply delete this file, restart MCU and repeat this step.
 * The MQTT server will detect the HALO 2 lamp and create entities using autodiscovery. 
 
 ![HA MQTT device](img/home_assistant_screenshot1.png)
@@ -71,7 +71,7 @@ The HALO2_ADDRESS will be saved to the `halo2_address.py` file in the root folde
 ### RF packet format
 ![RF packet format](img/rf_packet_format.png)
 
-Ref to the BC5602 datasheet, the packet starts with preambule **10101010** and has 4-byte address, **9 bits PCF** and a dynamic payload length, but always 10 bytes.
+Ref to the BC5602 datasheet, the packet starts with preamble **10101010** and has 4-byte address, **9 bits PCF** and a dynamic payload length, but always 10 bytes.
 
 ### Payload
 ![Payload example](img/payload_example.png)
