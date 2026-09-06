@@ -54,7 +54,8 @@ class benq_halo():
         if registers:
             status = self._bc5602.read_register(bc5602.STATUS_REGISTER | bc5602.CMD_READ_REGISTER)[0]
             sta1 = self._bc5602.read_register(bc5602.BANK0_STA1_REGISTER | bc5602.CMD_READ_REGISTER)[0]
-            print(f" STATUS: {status:08b} STA1: {sta1:08b}", end="")
+            omst = ("deep-sleep", "mid-sleep", "light-sleep", "reserved", "TX", "RX", "cal", "undef")[sta1 & 0x07]
+            print(f" STATUS: {status:08b} STA1: {sta1:08b} {omst}", end="")
         print()
 
     def shared_transceiver_config(self):
@@ -99,7 +100,10 @@ class benq_halo():
 
     def send_with_ack(self, packet):
         """
-        Send packet in standard mode
+        Send packet in standard mode.
+
+        Light-sleep strobes clear CE. For PTX, CE=1 is what actually starts TX
+        once the FIFO is not empty (BC5602 datasheet CE register).
         """
         self._bc5602.send_command(bc5602.CMD_FLUSH_RX_FIFO)
         self._bc5602.send_command(bc5602.CMD_FLUSH_TX_FIFO)
@@ -107,16 +111,26 @@ class benq_halo():
         self._bc5602.send_data([bc5602.CMD_WRITE_TX_FIFO_WITH_ACK] + packet)
         self._bc5602.set_register(bc5602.CE_REGISTER | bc5602.CMD_WRITE_REGISTER, 0x01)
         self._bc5602.send_command(bc5602.CMD_TX_MODE)
+        tx_empty = False
         for _ in range(80):
             status = self._bc5602.read_register(bc5602.STATUS_REGISTER | bc5602.CMD_READ_REGISTER)[0]
             if status & 0b00010000:
+                tx_empty = True
                 break
             time.sleep_ms(1)
-        else:
+        if not tx_empty:
             self._bc5602.send_command(bc5602.CMD_TX_MODE)
             time.sleep_ms(10)
+            status = self._bc5602.read_register(bc5602.STATUS_REGISTER | bc5602.CMD_READ_REGISTER)[0]
+            tx_empty = bool(status & 0b00010000)
+        if not tx_empty:
+            self._bc5602.set_register(bc5602.CE_REGISTER | bc5602.CMD_WRITE_REGISTER, 0x00)
+            self._bc5602.send_command(bc5602.CMD_FLUSH_TX_FIFO)
         if self._debug:
             self.print_hex(packet, "Sent")
+            if not tx_empty:
+                print("TX FIFO did not empty")
+        return tx_empty
 
     def read_ack(self):
         for _ in range(80):
@@ -151,8 +165,9 @@ class benq_halo():
         # Disable Auto-ACK
         self._bc5602.set_register(bc5602.BANK0_ENAA_REGISTER | bc5602.CMD_WRITE_REGISTER, 0x00)
 
-        # Clear buffer and start RX mode
+        # Clear buffer and start RX mode (CE is cleared by light-sleep above)
         self._bc5602.send_command(bc5602.CMD_FLUSH_RX_FIFO)
+        self._bc5602.set_register(bc5602.CE_REGISTER | bc5602.CMD_WRITE_REGISTER, 0x01)
         self._bc5602.send_command(bc5602.CMD_RX_MODE)
 
         self._bc5602_ack_mode = False
@@ -266,7 +281,8 @@ class benq_halo():
                 self.parse_lamp_status(ack_data)
             self.check_tx_fifo()
         elif self._debug:
-            self.print_hex(ack_data, "Bad ACK")
+            if ack_data:
+                self.print_hex(ack_data, "Bad ACK")
         return self.get_lamp_status()
 
     def get_lamp_status(self):
@@ -303,7 +319,7 @@ class benq_halo():
         for _ in range(10):
             self.send_with_ack([0x04] + pkt_payload)
             ack_data = self.read_ack()
-            if self._debug:
+            if self._debug and ack_data:
                 self.print_hex(ack_data, "Rcvt")
             if bytearray(pkt_payload) == ack_data[1:]:
                 break

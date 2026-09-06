@@ -41,31 +41,14 @@ def shift_left_one_bit(data: bytes):
     return bytes(result)
 
 
-def address_from_window(window):
-    if len(window) < 5:
+def address_from_offset(buf):
+    """Pico rule: bytes [7:12] start with 0xAA. XIAO bit alignment can be ±1."""
+    if len(buf) < 12:
         return None
-    for cand in (window[:5], shift_left_one_bit(window[:5]), shift_right_one_bit(window[:5])):
-        if cand[0] == 0xAA:
-            return [cand[4], cand[3], cand[2], cand[1]]
+    window = buf[7:12]
+    if window[0] == 0xAA:
+        return [window[4], window[3], window[2], window[1]]
     return None
-
-
-def extract_address(raw):
-    buffers = (raw, shift_right_one_bit(raw), shift_left_one_bit(raw))
-    for buf in buffers:
-        if len(buf) >= 12:
-            found = address_from_window(buf[7:12])
-            if found:
-                return found
-    for buf in buffers:
-        for i in range(0, len(buf) - 4):
-            found = address_from_window(buf[i:i + 5])
-            if found:
-                return found
-    return None
-
-
-NEED_MATCHES = 3
 
 
 def format_address(addr, channel):
@@ -73,6 +56,14 @@ def format_address(addr, channel):
         ", ".join("0x{:02x}".format(b) for b in addr), channel)
 
 
+def print_hex(data, title):
+    print(f"{title}: ", end="")
+    for byte in data:
+        print("{:02X} ".format(byte), end="")
+    print()
+
+
+NEED_MATCHES = 3
 CHANNELS = (RF_CHANNEL_1, RF_CHANNEL_2, RF_CHANNEL_3)
 OMST = ("deep-sleep", "mid-sleep", "light-sleep", "reserved", "TX", "RX", "cal", "undef")
 
@@ -92,6 +83,8 @@ def enter_rx(channel):
     _bc5602.set_register(bc5602.PKT1_REGISTER | bc5602.CMD_WRITE_REGISTER, 0x00)
     _bc5602.set_register(bc5602.BANK0_ENAA_REGISTER | bc5602.CMD_WRITE_REGISTER, 0x00)
     _bc5602.send_command(bc5602.CMD_FLUSH_RX_FIFO)
+    # Light-sleep clears CE. PRX only leaves sleep when CE=1 or after a stuck RX strobe.
+    _bc5602.set_register(bc5602.CE_REGISTER | bc5602.CMD_WRITE_REGISTER, 0x01)
     _bc5602.send_command(bc5602.CMD_RX_MODE)
 
 
@@ -104,6 +97,7 @@ def radio_snapshot():
 
 enter_rx(CHANNELS[0])
 print("Listening. BM5602 antenna (not the XIAO) against the remote; BACK 10% and 3925K.")
+print("Waiting lines should say mode=RX. Hold BM5602 antenna to the remote; BACK 10% and 3925K.")
 
 counts = {}
 channel_index = 0
@@ -115,10 +109,12 @@ while True:
         rxd_len = _bc5602.read_register(bc5602.PKT4_REGISTER | bc5602.CMD_READ_REGISTER)[0]
         n = rxd_len if rxd_len >= 12 else 16
         raw = _bc5602.receive_data(n, shift_one_bit=False)
-        window = shift_right_one_bit(raw)[7:12]
-        addr = address_from_window(window)
+        addr = (address_from_offset(raw)
+                or address_from_offset(shift_right_one_bit(raw))
+                or address_from_offset(shift_left_one_bit(raw)))
         if addr is None:
-            addr = extract_address(raw)
+            window = raw[7:12] if len(raw) >= 12 else raw[:5]
+            print_hex(window, "Heard (not AA)")
         _bc5602.send_command(bc5602.CMD_FLUSH_RX_FIFO)
         _bc5602.send_command(bc5602.CMD_RX_MODE)
         if addr:
