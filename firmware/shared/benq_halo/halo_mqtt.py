@@ -48,10 +48,12 @@ async def conn_han(client):
         await entity.on_connect()
 
 async def main(client):
+    print("MQTT user", MQTT.get("user"))
     try:
         await client.connect()
-    except OSError:
-        print('Connection failed.')
+    except OSError as e:
+        print("Connection failed.", e)
+        print("Broker", config.get("server"), "port", client.port, "user", MQTT.get("user"))
         return
     while True:
         await asyncio.sleep(5)
@@ -137,14 +139,11 @@ class HaMqttEntity(object):
         await self.mqtt_client.publish(self.discover_topic, json.dumps(self.discover_conf), retain=True)
 
     def receive(self, topic, message):
-        '''
-        Sends the message to the callback if the topic matches
-        :param topic:
-        :param message:
-        '''
         try:
+            key = topic.decode('utf-8') if isinstance(topic, bytes) else topic
+            print("MQTT cmd", key, message)
             payload = json.loads(message.decode('utf-8'))
-            self.input_topics[topic.decode('utf-8')](payload)
+            self.input_topics[key](payload)
             self.is_updated = True
         except KeyError:
             pass
@@ -285,7 +284,9 @@ class HaMqttBrightnessLightWithColorTemp(HaMqttBrightnessLight):
     def set(self, payload):
         super().set(payload)
         try:
-            self.set_color_temp(payload['color_temp'])
+            kelvin = payload.get('color_temp_kelvin', payload.get('color_temp'))
+            if kelvin is not None:
+                self.set_color_temp(kelvin)
         except KeyError:
             pass
 

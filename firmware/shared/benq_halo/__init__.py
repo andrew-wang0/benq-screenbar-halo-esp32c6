@@ -18,7 +18,7 @@ class benq_halo():
         self._bc5602 = bc5602.bc5602()
         self._bc5602_ack_mode = False
         self._bc5602_tx_mode = False
-        self._debug = False
+        self._debug = True
 
         self.ultrasonic_sensor_status = True
         self.front_lamp_status = True
@@ -60,6 +60,7 @@ class benq_halo():
         self._bc5602.send_command(bc5602.CMD_LIGHT_SLEEP)
 
         self._bc5602.configure_spi_output()
+        self._bc5602.set_bank(0)
 
         # Set channel 1 = 2405 MHz
         self._bc5602.set_register(bc5602.RFCH_REGISTER | bc5602.CMD_WRITE_REGISTER, RF_CHANNEL)
@@ -249,6 +250,8 @@ class benq_halo():
             if parse_lamp_status:
                 self.parse_lamp_status(ack_data)
             self.check_tx_fifo()
+        elif self._debug:
+            self.print_hex(ack_data, "Bad ACK")
         return self.get_lamp_status()
 
     def get_lamp_status(self):
@@ -347,11 +350,11 @@ class BackLamp:
             print("BackLamp init")
 
     def on(self):
-        if self._benq_halo.onoff_status and not self._benq_halo.back_lamp_status:
-            self._benq_halo.back_lamp_status = True
-            self._benq_halo.update_lamp_status()
-            if self._benq_halo._debug:
-                print("back_lamp_status True")
+        self._benq_halo.onoff_status = True
+        self._benq_halo.back_lamp_status = True
+        self._benq_halo.update_lamp_status()
+        if self._benq_halo._debug:
+            print("back_lamp_status True")
 
     def off(self):
         if self._benq_halo.onoff_status:
@@ -383,11 +386,11 @@ class FrontLamp:
             print("FrontLamp init")
 
     def on(self):
-        if self._benq_halo.onoff_status and not self._benq_halo.front_lamp_status:
-            self._benq_halo.front_lamp_status = True
-            self._benq_halo.update_lamp_status()
-            if self._benq_halo._debug:
-                print("front_lamp_status True")
+        self._benq_halo.onoff_status = True
+        self._benq_halo.front_lamp_status = True
+        self._benq_halo.update_lamp_status()
+        if self._benq_halo._debug:
+            print("front_lamp_status True")
 
     def off(self):
         if self._benq_halo.onoff_status:
