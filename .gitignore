@@ -2,4 +2,5 @@ __pycache__/
 *.pyc
 build/
 config/settings.py
+config/halo2_address.py
 halo2_address.py

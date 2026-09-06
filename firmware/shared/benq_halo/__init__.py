@@ -1,6 +1,9 @@
 import time
+import halo2_address as _halo2_address
 import bc5602
-from halo2_address import HALO2_ADDRESS
+
+HALO2_ADDRESS = _halo2_address.HALO2_ADDRESS
+RF_CHANNEL = getattr(_halo2_address, "RF_CHANNEL", 5)
 
 RF_CHANNEL_1 = 5  # 2405 - 2400 MHz (default)
 RF_CHANNEL_2 = 46 # 2446 - 2400 MHz
@@ -59,7 +62,7 @@ class benq_halo():
         self._bc5602.configure_spi_output()
 
         # Set channel 1 = 2405 MHz
-        self._bc5602.set_register(bc5602.RFCH_REGISTER | bc5602.CMD_WRITE_REGISTER, RF_CHANNEL_1)
+        self._bc5602.set_register(bc5602.RFCH_REGISTER | bc5602.CMD_WRITE_REGISTER, RF_CHANNEL)
 
         # Set datarate 125Kbps + address length 0x04
         self._bc5602.set_register(bc5602.DM1_REGISTER | bc5602.CMD_WRITE_REGISTER, DATA_RATE_125k | 0b10000000)

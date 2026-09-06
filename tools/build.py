@@ -21,6 +21,9 @@ def build(board, settings=None):
                     ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
     shutil.copy2(ROOT / "boards" / board / "board_config.py", output / "board_config.py")
     shutil.copy2(settings, output / "settings.py")
+    saved_address = ROOT / "config/halo2_address.py"
+    if saved_address.is_file():
+        shutil.copy2(saved_address, output / "halo2_address.py")
     return output
 
 

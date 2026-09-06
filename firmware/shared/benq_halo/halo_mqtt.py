@@ -12,6 +12,14 @@ mqtt_entities = []
 
 config.update(MQTT)
 
+hostname = MQTT.get("hostname")
+if hostname:
+    import network
+    try:
+        network.hostname(hostname)
+    except (AttributeError, OSError, ValueError, TypeError):
+        pass
+
 # default root topic for home assistant discovery
 HOME_ASSISTANT_PREFIX = "homeassistant"
 

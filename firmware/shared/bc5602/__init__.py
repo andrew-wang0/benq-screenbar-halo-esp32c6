@@ -179,21 +179,13 @@ class bc5602:
         self._cs.value(1)
 
     def _spi_write_then_read(self, command, count):
-        """One CS-low frame: command byte(s), then clock in count bytes."""
-        tx = bytearray(len(command) + count)
-        tx[:len(command)] = command
-        rx = bytearray(len(tx))
+        """Hold CS low for command clocks plus data clocks."""
         self._cs.value(0)
         try:
-            xfer = getattr(self._spi, "write_readinto", None)
-            if xfer is not None:
-                xfer(tx, rx)
-            else:
-                self._spi.write(command)
-                rx[len(command):] = self._spi.read(count)
+            self._spi.write(bytearray(command))
+            return self._spi.read(count)
         finally:
             self._cs.value(1)
-        return bytes(rx[len(command):])
 
     def send_data(self, command_and_data):
         self._spi_write(command_and_data)

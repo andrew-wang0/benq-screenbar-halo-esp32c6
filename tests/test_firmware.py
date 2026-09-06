@@ -87,7 +87,8 @@ class FirmwareTests(unittest.TestCase):
                 self.assertEqual((radio._spi_num, radio._cs.number, radio._sck.number,
                                   radio._mosi.number, radio._miso.number), expected)
                 self.assertEqual(radio._cs.value(), 1)
-                self.assertEqual(radio._spi.options['baudrate'], 4_000_000)
+                expected_baud = 500_000 if name == 'xiao_esp32c6' else 4_000_000
+                self.assertEqual(radio._spi.options['baudrate'], expected_baud)
                 # Route SDO before attempting any register reads.
                 route = [b'\x46\x40', b'\x47\x10'] if name == 'xiao_esp32c6' else [b'\x46\x48', b'\x47\x00']
                 self.assertEqual(radio._spi.writes[:2], route)

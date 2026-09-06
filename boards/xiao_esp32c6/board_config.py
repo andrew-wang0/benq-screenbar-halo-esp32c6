@@ -11,7 +11,7 @@ RADIO_MISO_GIO = 4
 # Bit-bang so the BM5602 wires actually toggle those pads.
 USE_SOFT_SPI = True
 # The BM5602 is rated for at most 8 Mbps; 4 MHz leaves wiring margin.
-SPI_BAUDRATE = 4_000_000
+SPI_BAUDRATE = 500_000
 LED = 15
 LED_ACTIVE_LOW = True
 ANTENNA_ENABLE = 3  # Active low
