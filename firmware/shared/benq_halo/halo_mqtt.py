@@ -1,6 +1,6 @@
-import sys
 import json
-from machine import Pin
+import hardware
+from settings import MQTT
 from mqtt_as import MQTTClient, config
 
 try:
@@ -10,29 +10,7 @@ except ImportError:
 
 mqtt_entities = []
 
-platform = sys.platform.lower()
-
-if "esp32" in platform:
-    wifi_led = Pin(2, Pin.OUT)
-elif "rp2" in platform:
-    wifi_led = Pin('LED', Pin.OUT)
-
-# Fill in the configuration below!!!
-# ==================================
-#
-# WiFi SSID and password
-#
-config['ssid'] = 'WiFi-network-name'
-config['wifi_pw'] = 'WiFi-password'
-#
-# MQTT server and credentials
-#
-config['server'] = 'Mqtt-server-IP-address'
-config['user'] = 'Mqtt-username'
-config['password'] = 'Mqtt-password'
-#
-# Fill in the configuration above!!!
-# ==================================
+config.update(MQTT)
 
 # default root topic for home assistant discovery
 HOME_ASSISTANT_PREFIX = "homeassistant"
@@ -51,7 +29,7 @@ async def heartbeat():
 
 
 async def wifi_han(state):
-    wifi_led.value(True)
+    hardware.wifi_status(state)
     print('Wifi is', 'up' if state else 'down')
     await asyncio.sleep(1)
 
@@ -108,7 +86,7 @@ class HaMqttEntity(object):
         self.base_topic = "{}/{}/{}".format(HOME_ASSISTANT_PREFIX, model, name)
         self.discover_topic = bytes("{}/config".format(self.base_topic), 'utf-8')
         self.discover_conf = {"name": full_name,
-                              "unique_id": bytes("{}_{}".format(model, name), 'utf-8'),
+                              "unique_id": "{}_{}".format(model, name),
                               "device": {
                                     "hw_version": 1,
                                     "identifiers": ["benq_halo2"],

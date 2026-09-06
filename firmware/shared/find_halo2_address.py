@@ -41,8 +41,7 @@ def shift_right_one_bit(data: bytes):
 
 _bc5602.send_command(bc5602.CMD_LIGHT_SLEEP)
 
-# Configure GIO2 as SPI data output: 4-wire mode
-_bc5602.set_register(bc5602.IO1_REGISTER | bc5602.CMD_WRITE_REGISTER, 0b01001000)
+_bc5602.configure_spi_output()
 
 # Set channel 1 = 2405 MHz
 _bc5602.set_register(bc5602.RFCH_REGISTER | bc5602.CMD_WRITE_REGISTER, RF_CHANNEL_1)
@@ -81,7 +80,7 @@ while True:
     if status == 0x00:
         rxd_len = _bc5602.read_register(bc5602.PKT4_REGISTER | bc5602.CMD_READ_REGISTER)[0]
         data = shift_right_one_bit(_bc5602.receive_data(rxd_len, shift_one_bit=False))[7:12]
-        if data[0] == 0xAA:
+        if len(data) == 5 and data[0] == 0xAA:
             addresses.append("HALO2_ADDRESS = [0x{:02x}, 0x{:02x}, 0x{:02x}, 0x{:02x}]".format(data[4], data[3], data[2], data[1]))
             addresses_count += 1
             if addresses_count == 5:

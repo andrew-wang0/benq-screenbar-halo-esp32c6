@@ -1,15 +1,7 @@
 import time
-import machine
+from address import ensure_address
 
-while True:
-    try:
-        from halo2_address import HALO2_ADDRESS
-        if (isinstance(HALO2_ADDRESS, list)) and (len(HALO2_ADDRESS) == 4) and all(isinstance(x, int) for x in HALO2_ADDRESS):
-             break
-    except ImportError:
-        print("No HALO2_ADDRESS: set brightness 10% and color temperature to 3925K on remote control.")
-        exec(open("/find_halo2_address.py").read())
-        machine.reset() # ESP32 out of memory fix
+ensure_address()
 
 import benq_halo
 import benq_halo.halo_mqtt as halo_mqtt
@@ -18,10 +10,6 @@ try:
     import asyncio
 except ImportError:
     import uasyncio as asyncio
-
-async def main():
-        await asyncio.sleep(0.1)
-
 
 benq_halo2 = benq_halo.benq_halo()
 lamp_status = benq_halo2.request_lamp_status(command=0x00)
@@ -52,21 +40,24 @@ def update_mqtt_entities():
     back_light.update(benq_halo2.back_lamp_status, benq_halo2.back_lamp_brightness, benq_halo2.onoff_status)
     front_light.update(benq_halo2.front_lamp_status, benq_halo2.front_lamp_brightness, benq_halo2.front_lamp_color_temp, benq_halo2.onoff_status)
 
-try:
-    interval = 5  # Check lamp status every 5 seconds
-    last_run = time.time()
+async def main():
+    interval_ms = 5000
+    last_run = time.ticks_ms()
     while True:
-        asyncio.run(main())
+        await asyncio.sleep_ms(100)
 
-        # Sniff messages from remote control
+        # Sniff messages from remote control.
         if benq_halo2.receive_without_ack():
             update_mqtt_entities()
-            last_run = time.time()
+            last_run = time.ticks_ms()
 
-        # Request lamp status
-        if (time.time() - last_run) >= interval:
-                lamp_status = benq_halo2.request_lamp_status()
-                update_mqtt_entities()
-                last_run = time.time()
+        if time.ticks_diff(time.ticks_ms(), last_run) >= interval_ms:
+            benq_halo2.request_lamp_status()
+            update_mqtt_entities()
+            last_run = time.ticks_ms()
+
+
+try:
+    asyncio.run(main())
 finally:
     halo_mqtt.close_client()

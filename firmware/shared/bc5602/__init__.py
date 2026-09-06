@@ -1,6 +1,7 @@
 from machine import Pin, SPI
 import time
-import sys
+import board_config as board
+import hardware
 
 CFG1_REGISTER = 0x00
 RC1_REGISTER = 0x01
@@ -84,31 +85,20 @@ CMD_TX_MODE = 0b00001110
 CMD_RX_MODE = 0b10001110
 
 class bc5602:
-    def __init__(self, spi_num=None, cs_pin=None, sck_pin=None, mosi_pin=None, miso_pin=None, baudrate=10000000):
+    def __init__(self, spi_num=None, cs_pin=None, sck_pin=None, mosi_pin=None, miso_pin=None, baudrate=None):
 
-        platform = sys.platform
-
-        if platform == "esp32":
-            self._spi_num = 1 if spi_num is None else spi_num
-            self._cs  = Pin(5, Pin.OUT) if cs_pin is None else cs_pin
-            self._sck = Pin(18, Pin.OUT) if sck_pin is None else sck_pin
-            self._mosi = Pin(23, Pin.OUT) if mosi_pin is None else mosi_pin
-            self._miso = Pin(19, Pin.IN) if miso_pin is None else miso_pin
-
-        elif platform == "rp2":
-            self._spi_num = 0 if spi_num is None else spi_num
-            self._cs = Pin(1, Pin.OUT) if cs_pin is None else cs_pin
-            self._sck = Pin(2, Pin.OUT) if sck_pin is None else sck_pin
-            self._mosi = Pin(3, Pin.OUT) if mosi_pin is None else mosi_pin
-            self._miso = Pin(4, Pin.IN) if miso_pin is None else miso_pin
-
-        else:
-            raise RuntimeError(f"Unsupported platform: {platform}")
+        hardware.setup()
+        self._spi_num = board.SPI_ID if spi_num is None else spi_num
+        self._cs = Pin(board.CS, Pin.OUT, value=1) if cs_pin is None else cs_pin
+        self._cs.value(1)
+        self._sck = Pin(board.SCK, Pin.OUT) if sck_pin is None else sck_pin
+        self._mosi = Pin(board.MOSI, Pin.OUT) if mosi_pin is None else mosi_pin
+        self._miso = Pin(board.MISO, Pin.IN) if miso_pin is None else miso_pin
+        baudrate = board.SPI_BAUDRATE if baudrate is None else baudrate
 
         self._spi = SPI(self._spi_num, baudrate=baudrate, polarity=0, phase=0, sck=self._sck, mosi=self._mosi, miso=self._miso)
 
-        # Configure GIO2 as SPI data output: 4-wire mode
-        self.set_register(IO1_REGISTER | CMD_WRITE_REGISTER, 0b01001000)
+        self.configure_spi_output()
 
         self.send_command(CMD_LIGHT_SLEEP)
         time.sleep_ms(1)
@@ -135,6 +125,21 @@ class bc5602:
             # Unstable for some reason
             #self.calibrate()
             self.set_register(RC1_REGISTER | CMD_WRITE_REGISTER, rc1_register & 0b01111111)
+
+    def configure_spi_output(self):
+        """Route SDO before the first SPI read, including after a soft reboot."""
+        if board.RADIO_MISO_GIO == 2:
+            io1, io2 = 0x48, 0x00
+        elif board.RADIO_MISO_GIO == 3:
+            io1, io2 = 0x40, 0x01
+        elif board.RADIO_MISO_GIO == 4:
+            io1, io2 = 0x40, 0x10
+        else:
+            raise ValueError("RADIO_MISO_GIO must be 2, 3 or 4")
+        # Keep the original 1 mA pad drive; deselect every other GIO output.
+        # Use writes only: the old SDO route may not match the current wiring.
+        self.set_register(IO1_REGISTER | CMD_WRITE_REGISTER, io1)
+        self.set_register(IO2_REGISTER | CMD_WRITE_REGISTER, io2)
 
     def calibrate(self):
         # start autocalibration

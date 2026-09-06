@@ -1,13 +1,7 @@
 import time
+from address import ensure_address
 
-while True:
-    try:
-        from halo2_address import HALO2_ADDRESS
-        if (isinstance(HALO2_ADDRESS, list)) and (len(HALO2_ADDRESS) == 4) and all(isinstance(x, int) for x in HALO2_ADDRESS):
-             break
-    except ImportError:
-        print("No HALO2_ADDRESS: set brightness 10% and color temperature to 3925K on remote control.")
-        exec(open("/find_halo2_address.py").read())
+ensure_address()
 
 import bc5602
 
@@ -28,8 +22,7 @@ def print_hex(data, title):
 
 _bc5602.send_command(bc5602.CMD_LIGHT_SLEEP)
 
-# Configure GIO2 as SPI data output: 4-wire mode
-_bc5602.set_register(bc5602.IO1_REGISTER | bc5602.CMD_WRITE_REGISTER, 0b01001000)
+_bc5602.configure_spi_output()
 
 # Set channel 1 = 2405 MHz
 _bc5602.set_register(bc5602.RFCH_REGISTER | bc5602.CMD_WRITE_REGISTER, RF_CHANNEL_1)

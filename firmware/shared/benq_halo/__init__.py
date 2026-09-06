@@ -56,8 +56,7 @@ class benq_halo():
     def shared_transceiver_config(self):
         self._bc5602.send_command(bc5602.CMD_LIGHT_SLEEP)
 
-        # Configure GIO2 as SPI data output: 4-wire mode
-        self._bc5602.set_register(bc5602.IO1_REGISTER | bc5602.CMD_WRITE_REGISTER, 0b01001000)
+        self._bc5602.configure_spi_output()
 
         # Set channel 1 = 2405 MHz
         self._bc5602.set_register(bc5602.RFCH_REGISTER | bc5602.CMD_WRITE_REGISTER, RF_CHANNEL_1)
@@ -426,4 +425,3 @@ class AutoConfig:
         self._benq_halo.update_lamp_status(auto=True)
         if self._benq_halo._debug:
             print("start_auto")
-
