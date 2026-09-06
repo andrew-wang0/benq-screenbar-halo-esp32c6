@@ -27,7 +27,7 @@ class Pin:
 
 
 class SPI:
-    def __init__(self, number, **kwargs):
+    def __init__(self, number=1, **kwargs):
         self.number, self.options = number, kwargs
         self.writes = []
         self.responses = []
@@ -37,6 +37,12 @@ class SPI:
 
     def read(self, count):
         return self.responses.pop(0) if self.responses else bytes([0x10] * count)
+
+    def write_readinto(self, wbuf, rbuf):
+        self.write(wbuf)
+        payload = self.read(max(len(rbuf) - 1, 0))
+        rbuf[0] = 0
+        rbuf[1:1 + len(payload)] = payload
 
 
 def load_board(name):
@@ -49,7 +55,7 @@ def load_board(name):
 class FirmwareTests(unittest.TestCase):
     def setUp(self):
         self.modules = patch.dict(sys.modules, {
-            "machine": types.SimpleNamespace(Pin=Pin, SPI=SPI),
+            "machine": types.SimpleNamespace(Pin=Pin, SPI=SPI, SoftSPI=SPI),
             "halo2_address": types.SimpleNamespace(HALO2_ADDRESS=[0x12, 0x34, 0x56, 0x78]),
         })
         self.modules.start()
@@ -85,6 +91,8 @@ class FirmwareTests(unittest.TestCase):
                 # Route SDO before attempting any register reads.
                 route = [b'\x46\x40', b'\x47\x10'] if name == 'xiao_esp32c6' else [b'\x46\x48', b'\x47\x00']
                 self.assertEqual(radio._spi.writes[:2], route)
+                if name == 'xiao_esp32c6':
+                    self.assertTrue(sys.modules['board_config'].USE_SOFT_SPI)
                 hardware = sys.modules['hardware']
                 hardware.wifi_status(True)
                 self.assertEqual(hardware._led.level, 0 if name == 'xiao_esp32c6' else 1)

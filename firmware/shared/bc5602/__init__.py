@@ -1,4 +1,8 @@
 from machine import Pin, SPI
+try:
+    from machine import SoftSPI
+except ImportError:
+    SoftSPI = None
 import time
 import board_config as board
 import hardware
@@ -96,7 +100,14 @@ class bc5602:
         self._miso = Pin(board.MISO, Pin.IN) if miso_pin is None else miso_pin
         baudrate = board.SPI_BAUDRATE if baudrate is None else baudrate
 
-        self._spi = SPI(self._spi_num, baudrate=baudrate, polarity=0, phase=0, sck=self._sck, mosi=self._mosi, miso=self._miso)
+        if getattr(board, "USE_SOFT_SPI", False):
+            if SoftSPI is None:
+                raise RuntimeError("SoftSPI is required on this board")
+            self._spi = SoftSPI(baudrate=baudrate, polarity=0, phase=0,
+                                sck=self._sck, mosi=self._mosi, miso=self._miso)
+        else:
+            self._spi = SPI(self._spi_num, baudrate=baudrate, polarity=0, phase=0,
+                            sck=self._sck, mosi=self._mosi, miso=self._miso)
 
         self.configure_spi_output()
 
@@ -162,41 +173,47 @@ class bc5602:
             result[i] = ((byte << 1) & 0xFF) | carry
         return bytes(result)
 
-    def send_data(self, command_and_data):
+    def _spi_write(self, data):
         self._cs.value(0)
-        self._spi.write(bytearray(command_and_data))
+        self._spi.write(bytearray(data))
         self._cs.value(1)
 
-    def receive_data(self, len, shift_one_bit=False):
+    def _spi_write_then_read(self, command, count):
+        """One CS-low frame: command byte(s), then clock in count bytes."""
+        tx = bytearray(len(command) + count)
+        tx[:len(command)] = command
+        rx = bytearray(len(tx))
         self._cs.value(0)
-        self._spi.write(bytearray([CMD_READ_RX_FIFO]))
-        data = self._spi.read(len)
-        self._cs.value(1)
+        try:
+            xfer = getattr(self._spi, "write_readinto", None)
+            if xfer is not None:
+                xfer(tx, rx)
+            else:
+                self._spi.write(command)
+                rx[len(command):] = self._spi.read(count)
+        finally:
+            self._cs.value(1)
+        return bytes(rx[len(command):])
+
+    def send_data(self, command_and_data):
+        self._spi_write(command_and_data)
+
+    def receive_data(self, len, shift_one_bit=False):
+        data = self._spi_write_then_read(bytearray([CMD_READ_RX_FIFO]), len)
         if shift_one_bit:
             data = self.shift_left_one_bit(data)
         return data
 
     def send_command(self, command, read_bytes=0):
-        self._cs.value(0)
-        try:
-            self._spi.write(bytearray([command]))
-            if read_bytes > 0:
-                data = self._spi.read(read_bytes)
-                return data
-        finally:
-            self._cs.value(1)
+        if read_bytes > 0:
+            return self._spi_write_then_read(bytearray([command]), read_bytes)
+        self._spi_write([command])
 
     def set_register(self, register, value):
-        self._cs.value(0)
-        self._spi.write(bytearray([register, value]))
-        self._cs.value(1)
+        self._spi_write([register, value])
 
     def read_register(self, register, bytes=1):
-        self._cs.value(0)
-        self._spi.write(bytearray([register]))
-        data = self._spi.read(bytes)
-        self._cs.value(1)
-        return data
+        return self._spi_write_then_read(bytearray([register]), bytes)
 
     def get_bank(self):
         return self.read_register(CFG1_REGISTER | CMD_READ_REGISTER)[0] & 0b00000011
