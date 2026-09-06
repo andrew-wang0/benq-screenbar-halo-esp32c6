@@ -36,6 +36,7 @@ class benq_halo():
         self.front_lamp_color_temp_max = 6500
 
         self.prepare_to_transfer()
+        print("RF address", HALO2_ADDRESS, "channel", 2400 + RF_CHANNEL, "MHz")
 
     def __str__(self):
         return  f"On/Off status: {self.onoff_status}\n" \
@@ -100,18 +101,32 @@ class benq_halo():
         """
         Send packet in standard mode
         """
+        self._bc5602.send_command(bc5602.CMD_FLUSH_RX_FIFO)
         self._bc5602.send_command(bc5602.CMD_FLUSH_TX_FIFO)
         time.sleep_ms(1)
         self._bc5602.send_data([bc5602.CMD_WRITE_TX_FIFO_WITH_ACK] + packet)
+        self._bc5602.set_register(bc5602.CE_REGISTER | bc5602.CMD_WRITE_REGISTER, 0x01)
         self._bc5602.send_command(bc5602.CMD_TX_MODE)
-        time.sleep_ms(5)
-        status = self._bc5602.read_register(bc5602.STATUS_REGISTER | bc5602.CMD_READ_REGISTER)[0] & 0b00010000
-        # check if the TX FIFO is empty, if not try to send data again
-        if status == 0x00:
+        for _ in range(80):
+            status = self._bc5602.read_register(bc5602.STATUS_REGISTER | bc5602.CMD_READ_REGISTER)[0]
+            if status & 0b00010000:
+                break
+            time.sleep_ms(1)
+        else:
             self._bc5602.send_command(bc5602.CMD_TX_MODE)
-            time.sleep_ms(5)
+            time.sleep_ms(10)
         if self._debug:
             self.print_hex(packet, "Sent")
+
+    def read_ack(self):
+        for _ in range(80):
+            status = self._bc5602.read_register(bc5602.STATUS_REGISTER | bc5602.CMD_READ_REGISTER)[0]
+            if (status & 0b00000001) == 0:
+                return bytearray(self._bc5602.receive_data(10))
+            time.sleep_ms(1)
+        if self._debug:
+            print("No ACK from lamp")
+        return bytearray()
 
     def prepare_to_receive_without_ack(self):
         """
@@ -243,7 +258,7 @@ class benq_halo():
         (control, color_temp_byte1, color_temp_byte2) = self.prepare_payload()
         self.send_with_ack([ command, control, self.front_lamp_brightness, color_temp_byte1, color_temp_byte2, 
                              self.back_lamp_brightness, color_temp_byte1, color_temp_byte2 ] + HALO2_PKT_END)
-        ack_data = bytearray(self._bc5602.receive_data(10))
+        ack_data = self.read_ack()
         if self.validate_packet(ack_data):
             if self._debug:
                 self.print_hex(ack_data, "Rcvt")
@@ -287,7 +302,7 @@ class benq_halo():
         # wait for status sync
         for _ in range(10):
             self.send_with_ack([0x04] + pkt_payload)
-            ack_data = bytearray(self._bc5602.receive_data(10))
+            ack_data = self.read_ack()
             if self._debug:
                 self.print_hex(ack_data, "Rcvt")
             if bytearray(pkt_payload) == ack_data[1:]:
