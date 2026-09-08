@@ -78,6 +78,22 @@ XIAO GPIO numbers and D labels differ: for example **D3 is GPIO21**, not GPIO3.
 The XIAO profile selects the onboard ceramic Wi-Fi antenna using GPIO3 low and
 GPIO14 low, and uses the active-low user LED on GPIO15. See
 [Seeed's board pin map and antenna documentation](https://wiki.seeedstudio.com/xiao_esp32c6_getting_started/).
+The XIAO profile resets the external BM5602 at driver initialization and then
+restores GIO4 as its SPI output. A hardware comparison recovered RX only after
+this reset; restarting MicroPython alone does not reset the external module.
+Automatic finder calibration is disabled for XIAO because it stalled in testing,
+consistent with upstream's decision to leave startup calibration disabled.
+The tested XIAO setup now receives CRC-verified remote packets and controls the
+lamp, but ACK status payloads have not been observed. Its periodic RF polling is
+disabled (`STATUS_POLL_INTERVAL_MS = 0`); HA actions send one application update
+without a burst of follow-up sync commands. Combined light messages apply power,
+brightness and temperature together. State comes from local requested values and
+explicit remote on/off and brightness/temperature actions until status readback
+is available. Passive wake, sleep and sync requests do not overwrite HA state,
+because they can contain cached remote settings. Repeated puck packets and unchanged
+MQTT state are suppressed; current state is republished on MQTT reconnect.
+Brightness uses HA's 0–255 scale.
+
 Pico wiring illustration:
 
 ![](img/connection_diagramm.png)

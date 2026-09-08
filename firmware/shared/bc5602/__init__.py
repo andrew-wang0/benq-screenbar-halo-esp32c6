@@ -40,6 +40,7 @@ BANK0_DPL1_REGISTER = 0x2A
 BANK0_DPL2_REGISTER = 0x2B
 BANK0_RXPW0_REGISTER = 0x2C
 BANK0_ENAA_REGISTER = 0x32
+BANK0_PEN_REGISTER = 0x37
 BANK0_P2B0_REGISTER = 0x33
 BANK0_P3B0_REGISTER = 0x34
 BANK0_P4B0_REGISTER = 0x35
@@ -110,13 +111,18 @@ class bc5602:
             self._spi = SPI(self._spi_num, baudrate=baudrate, polarity=0, phase=0,
                             sck=self._sck, mosi=self._mosi, miso=self._miso)
 
+        if getattr(board, "RESET_RADIO_ON_INIT", False):
+            self.send_command(CMD_SOFTWARE_RESET)
+            time.sleep_ms(5)
+
+        # Reset restores the default SDO routing; restore our route before reads.
         self.configure_spi_output()
 
         self.send_command(CMD_LIGHT_SLEEP)
         time.sleep_ms(1)
 
         # Check if BM5602 is connected
-        chip_version = self.read_register(CMD_READ_CHIP_VERSION | CMD_READ_REGISTER, bytes=3).hex().upper()
+        chip_version = self.send_command(CMD_READ_CHIP_VERSION, read_bytes=3).hex().upper()
         if (chip_version == "000000") or (chip_version == "FFFFFF"):
             raise RuntimeError("Transceiver BM5602 not found!")
         else:
@@ -154,13 +160,14 @@ class bc5602:
         self.set_register(IO2_REGISTER | CMD_WRITE_REGISTER, io2)
 
     def calibrate(self):
-        # start autocalibration
-        print("Starting calibration")
+        # VCO calibration is only valid in light-sleep after RF_CH is set.
         self.set_register(BANK0_OM_REGISTER | CMD_WRITE_REGISTER, ACAL_ENABLE)
-        time.sleep_ms(1)
-        while self.read_register(BANK0_OM_REGISTER | CMD_READ_REGISTER)[0] == ACAL_ENABLE:
+        for _ in range(200):
+            if self.read_register(BANK0_OM_REGISTER | CMD_READ_REGISTER)[0] != ACAL_ENABLE:
+                return True
             time.sleep_ms(1)
-        print("Complete calibration")
+        print("Calibration timeout")
+        return False
 
     def shift_left_one_bit(self, data: bytes):
         '''

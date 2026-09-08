@@ -7,11 +7,16 @@ SCK = 20  # D9 -> BM5602 SCK
 MOSI = 19 # D8 -> BM5602 SDIO
 MISO = 17 # D7 -> BM5602 GIO4
 RADIO_MISO_GIO = 4
-# GPSPI2 IOMUX is GPIO6/7/2, not D10/D9/D8. D7/GPIO17 is UART0 RX after reset.
-# Bit-bang so the BM5602 wires actually toggle those pads.
+# Retain the SoftSPI transport verified with this wiring.
 USE_SOFT_SPI = True
-# The BM5602 is rated for at most 8 Mbps; 4 MHz leaves wiring margin.
 SPI_BAUDRATE = 500_000
+# An MCU soft reset does not reset the external radio. The before/after
+# hardware check recovered RX only after resetting the BM5602 itself.
+RESET_RADIO_ON_INIT = True
+# Upstream leaves calibration disabled; our hardware test stalled at OM=08.
+CALIBRATE_ON_CHANNEL_CHANGE = False
+# No periodic RF writes while this lamp provides no status payload in its ACKs.
+STATUS_POLL_INTERVAL_MS = 0
 LED = 15
 LED_ACTIVE_LOW = True
 ANTENNA_ENABLE = 3  # Active low

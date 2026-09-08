@@ -111,6 +111,7 @@ class HaMqttEntity(object):
         self.current_state = {}
         self.availability_state = ''
         self.is_updated = False
+        self._published_state = {}
 
         self.mqtt_client = add_entity(self)
 
@@ -128,12 +129,19 @@ class HaMqttEntity(object):
 
     async def update_state(self):
         for output_topic, callback in self.output_topics.items():
-            await self.mqtt_client.publish(output_topic, json.dumps(callback()), retain=True)
+            payload = json.dumps(callback())
+            if self._published_state.get(output_topic) == payload:
+                continue
+            await self.mqtt_client.publish(output_topic, payload, retain=True)
+            self._published_state[output_topic] = payload
 
     async def on_connect(self):
         '''
         Subscribes to every input topics and sends the mqtt discover message
         '''
+        # Republish current state after reconnect, even if its value is unchanged.
+        self._published_state.clear()
+        self.is_updated = True
         for input_topic in self.input_topics:
             await self.mqtt_client.subscribe(input_topic)
         await self.mqtt_client.publish(self.discover_topic, json.dumps(self.discover_conf), retain=True)
@@ -141,9 +149,20 @@ class HaMqttEntity(object):
     def receive(self, topic, message):
         try:
             key = topic.decode('utf-8') if isinstance(topic, bytes) else topic
+            if key not in self.input_topics:
+                return
             print("MQTT cmd", key, message)
             payload = json.loads(message.decode('utf-8'))
-            self.input_topics[key](payload)
+            lamp = getattr(getattr(self, "light", None), "_benq_halo", None)
+            completed = False
+            if lamp is not None:
+                lamp.begin_update()
+            try:
+                self.input_topics[key](payload)
+                completed = True
+            finally:
+                if lamp is not None:
+                    lamp.end_update(commit=completed)
             self.is_updated = True
         except KeyError:
             pass
@@ -236,7 +255,8 @@ class HaMqttBrightnessLight(HaMqttBasicLight):
     def __init__(self, name, full_name, light, pow_status, dim_status, availability):
         super().__init__(name=name, full_name=full_name, light=light, pow_status=pow_status, availability=availability)
         self.discover_conf["brightness"] = True
-        self.current_state['brightness'] = (dim_status / 100) * 256
+        self.discover_conf["brightness_scale"] = 255
+        self.current_state['brightness'] = round(dim_status * 255 / 100)
         self.is_updated = True
 
     def set_brightness(self, value):
@@ -253,7 +273,7 @@ class HaMqttBrightnessLight(HaMqttBasicLight):
     
     def update(self, pow_status, dim_status, availability):
         new_availability_state = 'offline' if availability == False else 'online'
-        new_brightness = (dim_status / 100) * 256
+        new_brightness = round(dim_status * 255 / 100)
         new_state = "OFF" if pow_status == False else "ON"
         if (self.availability_state != new_availability_state) or \
            (self.current_state['brightness'] != new_brightness) or \

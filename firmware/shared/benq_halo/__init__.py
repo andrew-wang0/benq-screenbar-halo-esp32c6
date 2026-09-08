@@ -11,13 +11,16 @@ RF_CHANNEL_3 = 75 # 2475 - 2400 MHz
 
 DATA_RATE_125k = 0b00000010 # 125Kbps
 
-HALO2_PKT_END = [0x01, 0x02]
+HALO2_PKT_END = list(getattr(_halo2_address, "HALO2_PKT_END", [0x01, 0x02]))
 
 class benq_halo():
     def __init__(self):
         self._bc5602 = bc5602.bc5602()
         self._bc5602_ack_mode = False
         self._bc5602_tx_mode = False
+        self._last_tx_completed = False
+        self._batch_depth = 0
+        self._pending_update = None
         self._debug = True
 
         self.ultrasonic_sensor_status = True
@@ -37,6 +40,7 @@ class benq_halo():
 
         self.prepare_to_transfer()
         print("RF address", HALO2_ADDRESS, "channel", 2400 + RF_CHANNEL, "MHz")
+        print("RF payload trailer", HALO2_PKT_END)
 
     def __str__(self):
         return  f"On/Off status: {self.onoff_status}\n" \
@@ -98,38 +102,87 @@ class benq_halo():
         
         self._bc5602_ack_mode = True
 
+    def print_tx_state(self, label):
+        if not self._debug:
+            return
+        values = []
+        for name, reg in (("STATUS", bc5602.STATUS_REGISTER),
+                          ("IRQ1", bc5602.IRQ1_REGISTER),
+                          ("STA1", bc5602.BANK0_STA1_REGISTER),
+                          ("CE", bc5602.CE_REGISTER),
+                          ("MASK", bc5602.MASK_REGISTER),
+                          ("RT1", bc5602.RT1_REGISTER),
+                          ("RT2", bc5602.RT2_REGISTER)):
+            values.append((name, self._bc5602.read_register(reg | bc5602.CMD_READ_REGISTER)[0]))
+        irq = values[1][1]
+        print("TX {}: {} MAX_RT={} TX_DS={} RX_DR={}".format(
+            label, " ".join("{}={:02X}".format(name, value) for name, value in values),
+            int(bool(irq & 0x10)), int(bool(irq & 0x20)), int(bool(irq & 0x40))))
+
     def send_with_ack(self, packet):
         """
         Send packet in standard mode.
 
-        Light-sleep strobes clear CE. For PTX, CE=1 is what actually starts TX
-        once the FIFO is not empty (BC5602 datasheet CE register).
+        Start one hardware-managed transaction with CE=0 and the TX strobe.
+        Stop on MAX_RT rather than leaving continuous CE enabled or re-strobing.
         """
+        self._last_tx_completed = False
+        self._bc5602.set_register(bc5602.CE_REGISTER | bc5602.CMD_WRITE_REGISTER, 0)
+        self._bc5602.send_command(bc5602.CMD_LIGHT_SLEEP)
+        time.sleep_ms(1)
+        self._bc5602.set_register(bc5602.IRQ1_REGISTER | bc5602.CMD_WRITE_REGISTER, 0x70)
         self._bc5602.send_command(bc5602.CMD_FLUSH_RX_FIFO)
         self._bc5602.send_command(bc5602.CMD_FLUSH_TX_FIFO)
         time.sleep_ms(1)
+        self.print_tx_state("after flush")
+        status = self._bc5602.read_register(bc5602.STATUS_REGISTER | bc5602.CMD_READ_REGISTER)[0]
+        irq = self._bc5602.read_register(bc5602.IRQ1_REGISTER | bc5602.CMD_READ_REGISTER)[0]
+        if not (status & 0x10) or (irq & 0x70):
+            if getattr(bc5602.board, "RESET_RADIO_ON_INIT", False):
+                # One recovery attempt per call, before loading the new payload.
+                # Reset discards stale RX/TX data and loses packet configuration.
+                print("TX recovery: resetting BM5602 after unsuccessful flush/IRQ clear")
+                self._bc5602.send_command(bc5602.CMD_SOFTWARE_RESET)
+                time.sleep_ms(5)
+                self._bc5602.configure_spi_output()
+                self._bc5602.set_bank(0)
+                self.prepare_to_transfer()
+                self.print_tx_state("after reset recovery")
+                status = self._bc5602.read_register(bc5602.STATUS_REGISTER | bc5602.CMD_READ_REGISTER)[0]
+                irq = self._bc5602.read_register(bc5602.IRQ1_REGISTER | bc5602.CMD_READ_REGISTER)[0]
+            if not (status & 0x10) or (irq & 0x70):
+                print("TX aborted: FIFO/IRQ state is not clean; no packet enqueued")
+                return False
         self._bc5602.send_data([bc5602.CMD_WRITE_TX_FIFO_WITH_ACK] + packet)
-        self._bc5602.set_register(bc5602.CE_REGISTER | bc5602.CMD_WRITE_REGISTER, 0x01)
+        self.print_tx_state("after enqueue")
         self._bc5602.send_command(bc5602.CMD_TX_MODE)
         tx_empty = False
+        retry_limit = False
         for _ in range(80):
+            irq = self._bc5602.read_register(bc5602.IRQ1_REGISTER | bc5602.CMD_READ_REGISTER)[0]
+            if irq & 0x10:
+                retry_limit = True
+                break
             status = self._bc5602.read_register(bc5602.STATUS_REGISTER | bc5602.CMD_READ_REGISTER)[0]
             if status & 0b00010000:
                 tx_empty = True
                 break
             time.sleep_ms(1)
-        if not tx_empty:
-            self._bc5602.send_command(bc5602.CMD_TX_MODE)
-            time.sleep_ms(10)
-            status = self._bc5602.read_register(bc5602.STATUS_REGISTER | bc5602.CMD_READ_REGISTER)[0]
-            tx_empty = bool(status & 0b00010000)
+        self.print_tx_state("after first wait")
+        self._last_tx_completed = tx_empty and bool(irq & 0x20)
+        self.print_tx_state("before cleanup")
         if not tx_empty:
             self._bc5602.set_register(bc5602.CE_REGISTER | bc5602.CMD_WRITE_REGISTER, 0x00)
+            self._bc5602.send_command(bc5602.CMD_LIGHT_SLEEP)
+            time.sleep_ms(1)
+            self._bc5602.set_register(bc5602.IRQ1_REGISTER | bc5602.CMD_WRITE_REGISTER, 0x30)
             self._bc5602.send_command(bc5602.CMD_FLUSH_TX_FIFO)
+            time.sleep_ms(1)
+            self.print_tx_state("after failure cleanup")
         if self._debug:
             self.print_hex(packet, "Sent")
             if not tx_empty:
-                print("TX FIFO did not empty")
+                print("TX retry limit reached without ACK" if retry_limit else "TX completion timeout")
         return tx_empty
 
     def read_ack(self):
@@ -139,7 +192,10 @@ class benq_halo():
                 return bytearray(self._bc5602.receive_data(10))
             time.sleep_ms(1)
         if self._debug:
-            print("No ACK from lamp")
+            if self._last_tx_completed:
+                print("TX completed; no status payload received")
+            else:
+                print("No status payload received; TX completion not confirmed")
         return bytearray()
 
     def prepare_to_receive_without_ack(self):
@@ -197,7 +253,11 @@ class benq_halo():
                 no_ack = pkt_control_field & 0b00000001
                 # Check packet length and validate payload
                 if (len == 10) and (self.validate_packet(pkt_payload)):
-                    if no_ack:
+                    # Wake/sleep/sync requests can contain the remote's cached
+                    # settings, not the lamp's current state. Only explicit
+                    # control actions may replace an HA-requested value.
+                    state_update = pkt_payload[0] in (0x02, 0x03)
+                    if state_update:
                         self.parse_lamp_status(pkt_payload)
                     if self._debug:
                         print(f"Remote control packet len: {len} pid:{pid:02b} no_ack:{no_ack:01b} ", end="")
@@ -206,7 +266,7 @@ class benq_halo():
                     self._bc5602.send_command(bc5602.CMD_FLUSH_TX_FIFO)
                     self._bc5602.send_command(bc5602.CMD_FLUSH_RX_FIFO)
                     self._bc5602.send_command(bc5602.CMD_RX_MODE)
-                    return True
+                    return state_update
         else:
             return False
 
@@ -300,10 +360,28 @@ class benq_halo():
         }
         return lamp_status
 
+    def begin_update(self):
+        self._batch_depth += 1
+
+    def end_update(self, commit=True):
+        self._batch_depth -= 1
+        if self._batch_depth == 0:
+            pending = self._pending_update
+            self._pending_update = None
+            if commit and pending is not None:
+                self.update_lamp_status(*pending)
+
     def update_lamp_status(self, command=0x03, auto=False):
         """
         Update lamp with our internal state
         """
+        if self._batch_depth:
+            if self._pending_update is not None:
+                previous_command, previous_auto = self._pending_update
+                command = 0x02 if previous_command == 0x02 else command
+                auto = auto or previous_auto
+            self._pending_update = (command, auto)
+            return
         self._bc5602_tx_mode = True
         if not self._bc5602_ack_mode:
             self.prepare_to_transfer()
@@ -313,21 +391,15 @@ class benq_halo():
             control = control | 0b00000010
         pkt_payload = [ control, self.front_lamp_brightness, color_temp_byte1, color_temp_byte2, 
                              self.back_lamp_brightness, color_temp_byte1, color_temp_byte2] + HALO2_PKT_END
-        self.send_with_ack([command] + pkt_payload)
-
-        # wait for status sync
-        for _ in range(10):
-            self.send_with_ack([0x04] + pkt_payload)
+        try:
+            # Hardware handles retries. A missing ACK payload must not trigger
+            # repeated application commands carrying possibly stale settings.
+            self.send_with_ack([command] + pkt_payload)
             ack_data = self.read_ack()
             if self._debug and ack_data:
                 self.print_hex(ack_data, "Rcvt")
-            if bytearray(pkt_payload) == ack_data[1:]:
-                break
-            time.sleep_ms(500)
-
-        self.check_tx_fifo()
-
-        self._bc5602_tx_mode = False
+        finally:
+            self._bc5602_tx_mode = False
 
 class OnOff:
     """
@@ -401,7 +473,7 @@ class BackLamp:
                     print("onoff_status False")
 
     def brightness(self, value):
-        value_percent = round((value / 256) * 100)
+        value_percent = round((value / 255) * 100)
         self._benq_halo.back_lamp_brightness = value_percent
         self._benq_halo.update_lamp_status()
         if self._benq_halo._debug:
@@ -437,7 +509,7 @@ class FrontLamp:
                     print("onoff_status False")
 
     def brightness(self, value):
-        value_percent = round((value / 256) * 100)
+        value_percent = round((value / 255) * 100)
         self._benq_halo.front_lamp_brightness = value_percent
         self._benq_halo.update_lamp_status()
         if self._benq_halo._debug:

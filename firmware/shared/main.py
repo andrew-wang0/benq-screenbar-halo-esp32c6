@@ -1,4 +1,5 @@
 import time
+import board_config as board
 from address import ensure_address
 
 ensure_address()
@@ -41,7 +42,7 @@ def update_mqtt_entities():
     front_light.update(benq_halo2.front_lamp_status, benq_halo2.front_lamp_brightness, benq_halo2.front_lamp_color_temp, benq_halo2.onoff_status)
 
 async def main():
-    interval_ms = 5000
+    interval_ms = getattr(board, "STATUS_POLL_INTERVAL_MS", 5000)
     last_run = time.ticks_ms()
     while True:
         await asyncio.sleep_ms(100)
@@ -51,7 +52,7 @@ async def main():
             update_mqtt_entities()
             last_run = time.ticks_ms()
 
-        if time.ticks_diff(time.ticks_ms(), last_run) >= interval_ms:
+        if interval_ms > 0 and time.ticks_diff(time.ticks_ms(), last_run) >= interval_ms:
             benq_halo2.request_lamp_status()
             update_mqtt_entities()
             last_run = time.ticks_ms()
